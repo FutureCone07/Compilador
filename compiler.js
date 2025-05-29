@@ -1,6 +1,6 @@
 // 1. TOKENIZER
 function tokenize(input) {
-  
+
   const tokenSpec = [
     ['NEWLINE', /^\r?\n/],
     ['SPACE', /^[ ]+/],
@@ -22,6 +22,7 @@ function tokenize(input) {
     ['SEMICOLON', /^;/],
     // Operadores
     ['OP', /^[+\-*/%]/],
+    ['LOGICAL_OP', /^(==|!=|<=|>=|&&|\|\||<|>)/],
     // Variables
     ['VARIABLE', /^[a-zA-Z_][a-zA-Z0-9_]*/],
     ['DOT', /^\./],
@@ -55,31 +56,51 @@ function tokenize(input) {
 function parse(tokens) {
   let current = 0;
 
+  function parseExpression() {
+    let left = walk();
+
+    while (tokens[current] && (tokens[current].type === 'OP' || tokens[current].type === 'LOGICAL_OP')) {
+      const tokenoperator = tokens[current];
+      current++;
+      const right = walk();
+      left = {
+        type: tokenoperator.value,
+        left,
+        right
+      };
+    }
+
+    return left;
+  }
   function walk() {
     let token = tokens[current];
+    console.log(token);
     if (!token) throw new Error('Final inesperado de entrada');
 
     while (token && (token.type === 'SPACE' || token.type === 'NEWLINE')) {
-    current++;
-    token = tokens[current];
-  }
+      current++;
+      token = tokens[current];
+    }
 
     // Manejo de números
     if (token.type === 'NUMBER') {
       current++;
-      return { type: 'NumberLiteral', value: token.value };
+      return { 
+        type: token.value
+      };
     }
 
     // Manejo de paréntesis
     if (token.type === 'PAREN_OPEN') {
       current++;
-      const expression = walk();
+      const expression = parseExpression();
 
       token = tokens[current];
       if (!token || token.type !== 'PAREN_CLOSE') {
         throw new Error('Paréntesis de cierre esperado');
       }
       current++;
+
 
       return {
         type: 'ParenthesizedExpression',
@@ -89,106 +110,111 @@ function parse(tokens) {
 
     // Manejo de palabras reservadas
     if (token.type === 'IF') {
-  current++;
-  
-  if (tokens[current].type !== 'PAREN_OPEN') {
-    throw new Error('Esperado ( después de if');
-  }
-  current++;
-  const test = walk(); // condición
-
-  if (tokens[current].type !== 'PAREN_CLOSE') {
-    throw new Error('Esperado ) antes if condición');
-  }
-  current++;
-
-  if (tokens[current].type !== 'BRACE_OPEN') {
-    throw new Error('Esperado { antes if condición');
-  }
-  current++;
-  const consequent = [];
-
-  while (tokens[current].type !== 'BRACE_CLOSE') {
-    consequent.push(walk());
-  }
-  current++;
-
-  let alternate = null;
-  if (tokens[current] && tokens[current].type === 'ELSE') {
-    current++;
-
-    if (tokens[current].type === 'IF') {
-      alternate = walk(); // else if
-    } else if (tokens[current].type === 'BRACE_OPEN') {
       current++;
-      alternate = [];
 
-      while (tokens[current].type !== 'BRACE_CLOSE') {
-        alternate.push(walk());
+      if (tokens[current].type !== 'PAREN_OPEN') {
+        throw new Error('Esperado ( después de if');
       }
       current++;
-    } else {
-      throw new Error('Expected { or if after else');
+
+      const condicion = parseExpression(); // condición
+
+      if (tokens[current].type !== 'PAREN_CLOSE') {
+        
+        throw new Error('Esperado ) antes if condición');
+      }
+      current++;
+
+      if (tokens[current].type !== 'BRACE_OPEN') {
+        throw new Error('Esperado { antes if condición');
+      }
+      current++;
+      const consequent = [];
+
+      while (tokens[current].type !== 'BRACE_CLOSE') {
+        consequent.push(walk());
+      }
+      current++;
+      alternate=null
+      
+      if (tokens[current] && tokens[current].type === 'ELSE') {
+        current++;
+        
+
+        if (tokens[current].type === 'IF') {
+          alternate = walk(); // else if
+        } else if (tokens[current].type === 'BRACE_OPEN') {
+          current++;
+          alternate = [];
+
+          while (tokens[current].type !== 'BRACE_CLOSE') {
+            alternate.push(walk());
+          }
+          current++;
+        } else {
+          throw new Error('Expected { or if after else');
+        }
+      }
+
+      return {
+        type: 'If Statement',
+        condicion,
+        consequent,
+        alternate
+      };
     }
-  }
+    if (token.type === 'WHILE') {
+      current++;
 
-  return {
-    type: 'If Statement',
-    test,
-    consequent,
-    alternate
-  };
-}
-if (token.type === 'WHILE') {
-  current++;
+      if (tokens[current].type !== 'PAREN_OPEN') {
+        throw new Error('Expected ( after while');
+      }
+      current++;
+      const test = parseExpression(); // condición
 
-  if (tokens[current].type !== 'PAREN_OPEN') {
-    throw new Error('Expected ( after while');
-  }
-  current++;
-  const test = walk(); // condición
+      if (tokens[current].type !== 'PAREN_CLOSE') {
+        throw new Error('Expected ) after while condition');
+      }
+      current++;
 
-  if (tokens[current].type !== 'PAREN_CLOSE') {
-    throw new Error('Expected ) after while condition');
-  }
-  current++;
+      if (tokens[current].type !== 'BRACE_OPEN') {
+        throw new Error('Expected { after while');
+      }
+      current++;
 
-  if (tokens[current].type !== 'BRACE_OPEN') {
-    throw new Error('Expected { after while');
-  }
-  current++;
+      const body = [];
+      while (tokens[current].type !== 'BRACE_CLOSE') {
+        body.push(walk());
+      }
+      current++;
 
-  const body = [];
-  while (tokens[current].type !== 'BRACE_CLOSE') {
-    body.push(walk());
-  }
-  current++;
+      return {
+        type: 'WhileStatement',
+        test,
+        body
+      };
+    }
 
-  return {
-    type: 'WhileStatement',
-    test,
-    body
-  };
-}
-  
 
 
 
     // Manejo de variables
     if (token.type === 'VARIABLE') {
-      const name = token.value;
+      const variable = token.value;
       current++;
 
       // Asignación
       if (tokens[current] && tokens[current].type === 'ASSIGN') {
+        const assignToken = tokens[current];
         current++;
         const value = walk();
         return {
-          type: 'AssignmentExpression',
-          name,
+          type: assignToken.value,
+          variable,
           value
         };
       }
+
 
       // Llamada a función
       if (tokens[current] && tokens[current].type === 'PAREN_OPEN') {
@@ -201,27 +227,25 @@ if (token.type === 'WHILE') {
         current++;
         return {
           type: 'CallExpression',
-          name,
           arguments: args
         };
       }
 
-      return { type: 'Variable', name };
+      return { type: 'Variable'};
     }
 
     // Operadores
-    if (token.type === 'OP') {
+    if (token.type === 'OP' || tokens.type === 'LOGICAL_OP') {
       const operator = token.value;
+      const assignToken = tokens[current];
       current++;
 
-      const left = walk();
-      const right = walk();
+
 
       return {
-        type: 'BinaryExpression',
+        type: assignToken.value,
         operator,
-        left,
-        right
+
       };
     }
 
