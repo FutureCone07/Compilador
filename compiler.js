@@ -6,6 +6,7 @@ function tokenize(input) {
     ['SPACE', /^[ ]+/],
     ['NUMBER', /^\d+(\.\d+)?/],
     ['ASSIGN', /^[=:]/],
+    ['STRING', /^(['"])(.*?)\1/],
     // Palabras reservadas
     ['FUNCTION', /^function\b/],
     ['IF', /^if\b/],
@@ -13,6 +14,7 @@ function tokenize(input) {
     ['RETURN', /^return\b/],
     ['WHILE', /^while\b/],
     ['FOR', /^for\b/],
+    ['PRINT',/^console.log\b/],
     // Símbolos
     ['PAREN_OPEN', /^\(/],
     ['PAREN_CLOSE', /^\)/],
@@ -81,15 +83,42 @@ function parse(tokens) {
       current++;
       token = tokens[current];
     }
+    //Manejo de strings
+    if (token.type === 'STRING') {
+  current++;
+  return {   
+    type: token.value.slice(1, -1) 
+  };
+}
 
     // Manejo de números
     if (token.type === 'NUMBER') {
       current++;
-      return { 
+      return {
         type: token.value
       };
     }
+    if (token.type === 'PRINT') {
+  current++;
 
+  let argument;
+  if (tokens[current].type === 'PAREN_OPEN') {
+    current++;
+    argument = parseExpression();
+    if (tokens[current].type !== 'PAREN_CLOSE') {
+      throw new Error('Se esperaba ")" después de print');
+    }
+    current++;
+  } else {
+    // Permitir print sin paréntesis, como en Python
+    argument = walk();
+  }
+
+  return {
+    type: 'console.log',
+    value: argument
+  };
+}
     // Manejo de paréntesis
     if (token.type === 'PAREN_OPEN') {
       current++;
@@ -120,7 +149,7 @@ function parse(tokens) {
       const condicion = parseExpression(); // condición
 
       if (tokens[current].type !== 'PAREN_CLOSE') {
-        
+
         throw new Error('Esperado ) antes if condición');
       }
       current++;
@@ -129,24 +158,32 @@ function parse(tokens) {
         throw new Error('Esperado { antes if condición');
       }
       current++;
-      const consequent = [];
+      const consequent = [
+        { type: '{' } // Marca de apertura
+      ];
 
       while (tokens[current].type !== 'BRACE_CLOSE') {
         consequent.push(walk());
       }
+
+      consequent.push({ type: '}' }); // Marca de cierre
       current++;
-      alternate=null
-      
+      alternate = null
+
       if (tokens[current] && tokens[current].type === 'ELSE') {
         current++;
-        
+
 
         if (tokens[current].type === 'IF') {
           alternate = walk(); // else if
+
         } else if (tokens[current].type === 'BRACE_OPEN') {
+          while (tokens[current].type === 'SPACE' || tokens[current].type === 'NEWLINE') {
+          current++;
+          }
           current++;
           alternate = [];
-
+          
           while (tokens[current].type !== 'BRACE_CLOSE') {
             alternate.push(walk());
           }
@@ -231,7 +268,7 @@ function parse(tokens) {
         };
       }
 
-      return { type: 'Variable'};
+      return { type: 'Variable' };
     }
 
     // Operadores
@@ -322,7 +359,7 @@ function renderASTDiagram(ast) {
     .attr("y1", d => d.source.y)
     .attr("x2", d => d.target.x)
     .attr("y2", d => d.target.y)
-    .attr("stroke", "#ccc");
+    .attr("stroke", "#007bff");
 
   g.selectAll("circle")
     .data(root.descendants())
